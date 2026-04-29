@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>KEC NOTES — Notes &amp; Materials Portal</title>
+  <meta name="description"
+        content="Browse, download, and save academic notes, lab manuals, videos, and presentations — organized by department and semester. Works offline." />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f0e17" />
+  <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+<!-- Splash / Loading -->
+<div id="splash" class="splash">
+  <div class="splash-content">
+    <div class="splash-icon">📚</div>
+    <h1>KEC NOTES</h1>
+    <p>Loading your materials…</p>
+    <div class="loader">
+      <div></div>
+      <div></div>
+      <div></div>
+    </div>
+  </div>
+</div>
+
+<!-- App Shell -->
+<div id="app" class="app hidden">
+  <!-- Sidebar -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon">📚</span>
+      <span class="brand-text">KEC NOTES</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#home" class="nav-link active" data-view="home">
+        <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+      </a>
+      <a href="#departments" class="nav-link" data-view="departments">
+        <span class="nav-icon">🏛️</span><span class="nav-label">Departments</span>
+      </a>
+      <a href="#lab-manuals" class="nav-link" data-view="lab-manuals">
+        <span class="nav-icon">🔬</span><span class="nav-label">Lab Manuals</span>
+      </a>
+      <div class="nav-divider"></div>
+      <a href="#upload" class="nav-link upload-link hidden" id="nav-upload" data-view="upload">
+        <span class="nav-icon">📤</span><span class="nav-label">Upload Material</span>
+      </a>
+      <a href="#login" class="nav-link" id="nav-login" data-view="login">
+        <span class="nav-icon">👤</span><span class="nav-label">Faculty Login</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer" id="sidebar-footer"></div>
+  </aside>
+
+  <!-- Mobile top bar -->
+  <header class="topbar">
+    <button id="menu-toggle" class="menu-toggle" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="topbar-brand">📚 KEC NOTES</div>
+    <div class="topbar-actions">
+      <button id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">🌓</button>
+      <button id="topbar-search-btn" class="icon-btn" aria-label="Search">🔍</button>
+    </div>
+  </header>
+
+  <!-- Overlay for mobile sidebar -->
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+  <!-- Main Content -->
+  <main id="main-content" class="main-content">
+    <!-- Views injected here -->
+  </main>
+</div>
+
+<!-- Material Viewer Modal -->
+<div id="viewer-modal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-container">
+    <div class="modal-header">
+      <h3 id="viewer-title"></h3>
+      <button id="viewer-close" class="modal-close" aria-label="Close">✕</button>
+    </div>
+    <div id="viewer-body" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" class="toast-container"></div>
+
+<script type="module" src="db.js"></script>
+
+<script>
+  function loadAppScripts() {
+    const scripts = [
+      'auth.js?v=' + Date.now(),
+      'router.js?v=' + Date.now(),
+      'home.js?v=' + Date.now(),
+      'departments.js?v=' + Date.now(),
+      'labManuals.js?v=' + Date.now(),
+      'saved.js?v=' + Date.now(),
+      'upload.js?v=' + Date.now(),
+      'login.js?v=' + Date.now(),
+      'viewer.js?v=' + Date.now(),
+      'app.js?v=' + Date.now()
+    ];
+    let chain = Promise.resolve();
+    scripts.forEach(src => {
+      chain = chain.then(() => new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.body.appendChild(s);
+      }));
+    });
+  }
+  window.addEventListener('db-ready', loadAppScripts, { once: true });
+</script>
+
+<script>
+  /* ===============================
+     📥 DOWNLOAD FUNCTION (FIXED)
+  ================================ */
+  function downloadFile(url, fileName = "file.pdf") {
+
+    // ✅ NORMAL HTTP URL → use Android bridge (anchor click doesn't work in WebView)
+    if (url.startsWith("http")) {
+      if (window.Android) {
+        Android.downloadUrl(url, fileName);
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        a.click();
+      }
+      return;
+    }
+
+    // ✅ BASE64 FILE
+    if (url.startsWith("data:")) {
+      if (window.Android) {
+        Android.downloadBase64(url, "application/pdf", fileName);
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        a.click();
+      }
+      return;
+    }
+
+    // ✅ BLOB → convert to base64 first, then send to Android
+    if (url.startsWith("blob:")) {
+      fetch(url)
+        .then(res => res.blob())
+        .then(blob => {
+          const reader = new FileReader();
+          reader.onloadend = function () {
+            if (window.Android) {
+              Android.downloadBase64(reader.result, "application/pdf", fileName);
+            }
+          };
+          reader.readAsDataURL(blob);
+        });
+    }
+  }
+
+  /* ===============================
+     👁️ VIEW PDF FUNCTION
+  ================================ */
+  function viewFile(url, fileName = "file.pdf") {
+
+    // ✅ NORMAL URL
+    if (url.startsWith("http")) {
+      window.open(url, "_blank");
+      return;
+    }
+
+    // ✅ BASE64
+    if (url.startsWith("data:")) {
+      if (window.Android) {
+        Android.openFile(url, "application/pdf", fileName);
+      } else {
+        window.open(url);
+      }
+      return;
+    }
+
+    // ✅ BLOB → convert then open
+    if (url.startsWith("blob:")) {
+      fetch(url)
+        .then(res => res.blob())
+        .then(blob => {
+          const reader = new FileReader();
+          reader.onloadend = function () {
+            if (window.Android) {
+              Android.openFile(reader.result, "application/pdf", fileName);
+            }
+          };
+          reader.readAsDataURL(blob);
+        });
+    }
+  }
+</script>
+
+</body>
+</html>
